@@ -18,4 +18,5 @@ depends: [
   "dune" {>= "3.5"}
   "lun" {= version}
   "ppxlib" {>= "0.7.0"}
+  "fmt" {with-test}
 ]
