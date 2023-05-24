@@ -1,0 +1,5 @@
+(executable
+ (name lun)
+ (public_name lun)
+ (libraries ppx_lun)
+ (package ppx_lun))

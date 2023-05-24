@@ -1,0 +1,5 @@
+dock-collection-brackets=true
+type-decl=compact
+break-separators=before
+field-space=tight-decl
+sequence-style=separator

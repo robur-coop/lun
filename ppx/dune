@@ -1,0 +1,6 @@
+(library
+ (name ppx_lun)
+ (public_name ppx_lun)
+ (kind ppx_deriver)
+ (ppx_runtime_libraries lun)
+ (libraries fmt ppxlib))

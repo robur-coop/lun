@@ -1,0 +1,14 @@
+(tests
+ (names basic)
+ (modules basic)
+ (libraries fmt)
+ (preprocess
+  (pps ppx_lun))
+ (package ppx_lun))
+
+(tests
+ (names readme)
+ (modules readme)
+ (preprocess
+  (pps ppx_lun))
+ (package ppx_lun))

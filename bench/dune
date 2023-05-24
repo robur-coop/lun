@@ -1,0 +1,25 @@
+(executable
+ (name get)
+ (modules get)
+ (preprocess
+  (pps ppx_lun))
+ (enabled_if
+  (= %{profile} benchmark))
+ (libraries bechamel bechamel-js lun))
+
+(rule
+ (targets get.json)
+ (enabled_if
+  (= %{profile} benchmark))
+ (action
+  (with-stdout-to
+   %{targets}
+   (run ./get.exe))))
+
+(rule
+ (targets get.html)
+ (enabled_if
+  (= %{profile} benchmark))
+ (mode promote)
+ (action
+  (system "%{bin:bechamel-html} < %{dep:get.json} > %{targets}")))
