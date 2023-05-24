@@ -2,12 +2,12 @@ opam-version: "2.0"
 maintainer:   [ "romain.calascibetta@gmail.com" ]
 authors:      "Romain Calascibetta"
 license:      "ISC"
-homepage:     "https://github.com/dinosaure/lun"
-bug-reports:  "https://github.com/dinosaure/lun/issues"
-dev-repo:     "git+https://github.com/dinosaure/lun.git"
-doc:          "https://dinosaure.github.io/lun/"
-synopsis:     "Optics with ppx"
-description: """A library which provides optics for any types"""
+homepage:     "https://git.robur.io/robur/lun"
+bug-reports:  "https://git.robur.io/robur/lun/issues"
+dev-repo:     "git+https://git.robur.io/robur/lun.git"
+doc:          "https://roburio.github.io/lun/"
+synopsis:     "Optics in OCaml"
+description: """(▀̿Ĺ̯▀̿ ̿)"""
 
 build: ["dune" "build" "-p" name "-j" jobs]
 run-test: [ "dune" "runtest" "-p" name "-j" jobs ]

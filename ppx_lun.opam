@@ -1,12 +1,12 @@
 opam-version: "2.0"
 maintainer:   ["Romain Calascibetta <romain.calascibetta@gmail.com>"]
 authors:      ["Romain Calascibetta <romain.calascibetta@gmail.com>"]
-license:      "ISC"
+license:      "MIT"
 tags:         ["ppx" "optics"]
-homepage:     "https://github.com/dinosaure/lun"
-bug-reports:  "https://github.com/dinosaure/lun/issues"
-dev-repo:     "git+https://github.com/dinosaure/ppx_lun.git"
-synopsis:     "Optics and ppx"
+homepage:     "https://git.robur.io/robur/lun"
+bug-reports:  "https://git.robur.io/robur/lun/issues"
+dev-repo:     "git+https://git.robur.io/robur/lun.git"
+synopsis:     "Optics with lun package and PPX"
 
 build: [
   ["dune" "subst"] {dev}
