@@ -5,7 +5,7 @@ license:      "MIT"
 tags:         ["ppx" "optics"]
 homepage:     "https://git.robur.io/robur/lun"
 bug-reports:  "https://git.robur.io/robur/lun/issues"
-dev-repo:     "git+https://git.robur.io/robur/lun.git"
+dev-repo:     "git+https://github.com/roburio/lun.git"
 synopsis:     "Optics with lun package and PPX"
 
 build: [
