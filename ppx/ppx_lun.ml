@@ -119,8 +119,7 @@ let prism_impl ~name ~uniq (ctor : constructor_declaration) =
               [
                 ( Nolabel
                 , pexp_tuple ~loc
-                    (List.map ts ~f:(fun i -> evar ~loc (str "%s%d" var i)))
-                )
+                    (List.map ts ~f:(fun i -> evar ~loc (str "%s%d" var i))) )
               ]
           in
           let cases = [ case ~lhs ~guard:None ~rhs ] in
