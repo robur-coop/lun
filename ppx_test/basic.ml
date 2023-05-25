@@ -5,6 +5,7 @@ type b = B of int * int [@@deriving lun]
 type c = C of (int * int) [@@deriving lun]
 type u = X | Y | Z [@@deriving lun]
 type v = { mutable v: int } [@@deriving lun]
+type r = A of { foo: int } | B of { a: int; b: int } [@@deriving lun]
 
 let () =
   let open Lun in

@@ -1,4 +1,4 @@
-(** {1 Optics in OCaml: Lunette.}
+(** {1 Optics in OCaml: Lun(ette).}
 
     The aim of this library is to provide simple access to user-defined types.
     The domain of optics for functional languages (and its documentation) can be
