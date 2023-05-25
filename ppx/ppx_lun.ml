@@ -5,6 +5,7 @@ open Ast_builder.Default
 let ( $. ) l x = Longident.Ldot (l, x)
 let lun = Longident.Lident "Lun"
 let unit = lident "unit"
+let str fmt = Format.kasprintf Fun.id fmt
 
 let random_string ~len =
   let res = Bytes.create len in
@@ -19,7 +20,7 @@ let random_string ~len =
   done ;
   Bytes.unsafe_to_string res
 
-let var ?(len = 6) prefix = Fmt.str "%s%s" prefix (random_string ~len)
+let var ?(len = 6) prefix = str "%s%s" prefix (random_string ~len)
 
 let lense_impl ~name ~uniq (ld : label_declaration) =
   let field_name = ld.pld_name.txt in
@@ -49,7 +50,7 @@ let lense_impl ~name ~uniq (ld : label_declaration) =
   pstr_value ~loc Nonrecursive
     [
       {
-        pvb_pat = ppat_var ~loc { loc; txt = Fmt.str "%s_%s" name field_name }
+        pvb_pat = ppat_var ~loc { loc; txt = str "%s_%s" name field_name }
       ; pvb_expr =
           pexp_fun ~loc Nolabel None (punit ~loc)
             (pexp_apply ~loc
@@ -59,48 +60,6 @@ let lense_impl ~name ~uniq (ld : label_declaration) =
       ; pvb_loc = loc
       }
     ]
-
-(*
-(* A constructor with a record *)
-let prism_lense_impl ~ctor ~uniq (ld : label_declaration) =
-  let field_name = ld.pld_name.txt in
-  let loc = ld.pld_loc in
-  let prj =
-    let var = var "v" in
-    pexp_fun ~loc Nolabel None
-      (ppat_var ~loc { loc; txt = var })
-      (pexp_field ~loc
-         (pexp_ident ~loc { loc; txt = lident var })
-         { loc; txt = lident field_name })
-  in
-  let inj =
-    let var = var "v" in
-    pexp_fun ~loc Nolabel None
-      (if uniq then ppat_any ~loc else ppat_var ~loc { loc; txt = var })
-      (pexp_fun ~loc Nolabel None
-         (ppat_var ~loc { loc; txt = field_name })
-         (pexp_record ~loc
-            [
-              ( { loc; txt = lident field_name }
-              , pexp_ident ~loc { loc; txt = lident field_name } )
-            ]
-            (if uniq then None
-            else Some (pexp_ident ~loc { loc; txt = lident var }))))
-  in
-  pstr_value ~loc Nonrecursive
-    [
-      {
-        pvb_pat = ppat_var ~loc { loc; txt = Fmt.str "%s_%s" name field_name }
-      ; pvb_expr =
-          pexp_fun ~loc Nolabel None (punit ~loc)
-            (pexp_apply ~loc
-               (pexp_ident ~loc { loc; txt = lun $. "lense" })
-               [ (Nolabel, prj); (Nolabel, inj) ])
-      ; pvb_attributes = []
-      ; pvb_loc = loc
-      }
-    ]
-*)
 
 let error_case ~loc =
   case
@@ -139,11 +98,11 @@ let prism_impl ~name ~uniq (ctor : constructor_declaration) =
           pexp_fun ~loc Nolabel None
             (ppat_tuple ~loc
                (List.map ts ~f:(fun i ->
-                    ppat_var ~loc { loc; txt = Fmt.str "%s%d" var i })))
+                    ppat_var ~loc { loc; txt = str "%s%d" var i })))
             (econstruct ctor
                (Some
                   (pexp_tuple ~loc
-                     (List.map ts ~f:(fun i -> evar ~loc (Fmt.str "%s%d" var i))))))
+                     (List.map ts ~f:(fun i -> evar ~loc (str "%s%d" var i))))))
         in
         let prj =
           let var = var "v" in
@@ -152,7 +111,7 @@ let prism_impl ~name ~uniq (ctor : constructor_declaration) =
               (Some
                  (ppat_tuple ~loc
                     (List.map ts ~f:(fun i ->
-                         ppat_var ~loc { loc; txt = Fmt.str "%s%d" var i }))))
+                         ppat_var ~loc { loc; txt = str "%s%d" var i }))))
           in
           let rhs =
             pexp_apply ~loc
@@ -160,7 +119,7 @@ let prism_impl ~name ~uniq (ctor : constructor_declaration) =
               [
                 ( Nolabel
                 , pexp_tuple ~loc
-                    (List.map ts ~f:(fun i -> evar ~loc (Fmt.str "%s%d" var i)))
+                    (List.map ts ~f:(fun i -> evar ~loc (str "%s%d" var i)))
                 )
               ]
           in
@@ -174,7 +133,7 @@ let prism_impl ~name ~uniq (ctor : constructor_declaration) =
           pexp_fun ~loc Nolabel None
             (ppat_tuple ~loc
                (List.map fields ~f:(fun { pld_name; _ } ->
-                    ppat_var ~loc { loc; txt = Fmt.str "%s" pld_name.txt })))
+                    ppat_var ~loc { loc; txt = str "%s" pld_name.txt })))
             (econstruct ctor
                (Some
                   (pexp_record ~loc
@@ -212,7 +171,7 @@ let prism_impl ~name ~uniq (ctor : constructor_declaration) =
   pstr_value ~loc Nonrecursive
     [
       {
-        pvb_pat = ppat_var ~loc { loc; txt = Fmt.str "%s_%s" name ctor_name }
+        pvb_pat = ppat_var ~loc { loc; txt = str "%s_%s" name ctor_name }
       ; pvb_expr =
           pexp_fun ~loc Nolabel None (punit ~loc)
             (pexp_apply ~loc
@@ -228,7 +187,7 @@ let lense_intf ~name (ld : label_declaration) =
   let loc = ld.pld_loc in
   psig_value ~loc
     {
-      pval_name = { loc; txt = Fmt.str "%s_%s" name field_name }
+      pval_name = { loc; txt = str "%s_%s" name field_name }
     ; pval_type =
         ptyp_constr ~loc
           { loc; txt = lun $. "t" }
@@ -250,7 +209,7 @@ let prism_intf ~name (ctor : constructor_declaration) =
   | Pcstr_tuple [] ->
       psig_value ~loc
         {
-          pval_name = { loc; txt = Fmt.str "%s_%s" name ctor_name }
+          pval_name = { loc; txt = str "%s_%s" name ctor_name }
         ; pval_type =
             ptyp_constr ~loc
               { loc; txt = lun $. "t" }
@@ -267,7 +226,7 @@ let prism_intf ~name (ctor : constructor_declaration) =
   | Pcstr_tuple ts ->
       psig_value ~loc
         {
-          pval_name = { loc; txt = Fmt.str "%s_%s" name ctor_name }
+          pval_name = { loc; txt = str "%s_%s" name ctor_name }
         ; pval_type =
             ptyp_constr ~loc
               { loc; txt = lun $. "t" }
@@ -285,7 +244,7 @@ let prism_intf ~name (ctor : constructor_declaration) =
       let ts = List.map ~f:(fun { pld_type; _ } -> pld_type) fields in
       psig_value ~loc
         {
-          pval_name = { loc; txt = Fmt.str "%s_%s" name ctor_name }
+          pval_name = { loc; txt = str "%s_%s" name ctor_name }
         ; pval_type =
             ptyp_constr ~loc
               { loc; txt = lun $. "t" }
