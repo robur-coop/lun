@@ -340,7 +340,7 @@ val ( >> ) : ('a, 'b, 'c, 'd) t -> ('c, 'd, 'e, 'f) t -> ('a, 'b, 'e, 'f) t
 (** [a >> b] composes the given optic [a] with [b] such as [b] will inject what
     [a] projects and {i vice-versa}. For instance:
 
-    [{
+    {[
       type t = A of int option | B of string
       let a = Lun.prism (fun n -> A n) @@ function
         | A n -> Ok n
@@ -348,7 +348,7 @@ val ( >> ) : ('a, 'b, 'c, 'd) t -> ('c, 'd, 'e, 'f) t -> ('a, 'b, 'e, 'f) t
 
       let succ = Lun.(setf (a >> some) ~f:succ)
       assert (succ (A (Some 0)) = A (Some 1))
-    }] *)
+    ]} *)
 
 (** Common lenses and prisms. *)
 
