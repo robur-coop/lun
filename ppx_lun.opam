@@ -3,9 +3,9 @@ maintainer:   ["Romain Calascibetta <romain.calascibetta@gmail.com>"]
 authors:      ["Romain Calascibetta <romain.calascibetta@gmail.com>"]
 license:      "MIT"
 tags:         ["ppx" "optics"]
-homepage:     "https://git.robur.io/robur/lun"
-bug-reports:  "https://git.robur.io/robur/lun/issues"
-dev-repo:     "git+https://github.com/roburio/lun.git"
+homepage:     "https://git.robur.coop/robur/lun"
+bug-reports:  "https://git.robur.coop/robur/lun/issues"
+dev-repo:     "git+https://github.com/robur-coop/lun.git"
 synopsis:     "Optics with lun package and PPX"
 
 build: [
