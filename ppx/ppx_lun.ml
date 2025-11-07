@@ -58,6 +58,7 @@ let lense_impl ~name ~uniq (ld : label_declaration) =
                [ (Nolabel, prj); (Nolabel, inj) ])
       ; pvb_attributes = []
       ; pvb_loc = loc
+      ; pvb_constraint = None
       }
     ]
 
@@ -87,7 +88,7 @@ let prism_impl ~name ~uniq (ctor : constructor_declaration) =
               [ (Nolabel, eunit ~loc) ]
           in
           let cases = [ case ~lhs ~guard:None ~rhs ] in
-          pexp_function ~loc
+          pexp_function_cases ~loc
             (if uniq then cases else List.rev (error_case ~loc :: cases))
         in
         (inj, prj)
@@ -123,7 +124,7 @@ let prism_impl ~name ~uniq (ctor : constructor_declaration) =
               ]
           in
           let cases = [ case ~lhs ~guard:None ~rhs ] in
-          pexp_function ~loc
+          pexp_function_cases ~loc
             (if uniq then cases else List.rev (error_case ~loc :: cases))
         in
         (inj, prj)
@@ -162,7 +163,7 @@ let prism_impl ~name ~uniq (ctor : constructor_declaration) =
               ]
           in
           let cases = [ case ~lhs ~guard:None ~rhs ] in
-          pexp_function ~loc
+          pexp_function_cases ~loc
             (if uniq then cases else List.rev (error_case ~loc :: cases))
         in
         (inj, prj)
@@ -178,6 +179,7 @@ let prism_impl ~name ~uniq (ctor : constructor_declaration) =
                [ (Nolabel, inj); (Nolabel, prj) ])
       ; pvb_attributes = []
       ; pvb_loc = loc
+      ; pvb_constraint = None
       }
     ]
 
