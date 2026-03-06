@@ -24,7 +24,10 @@ let get f t = (f ()).f (fun v _ -> v) t never
 let get_opt f t = (f ()).f (fun v _ -> Some v) t (Fun.const Option.none)
 let setf o ~f t = (o ()).f (fun a rf -> rf (f a)) t (fun r -> r)
 let set o v = setf o ~f:(fun _ -> v)
+
+let id () = lense Fun.id (fun _ x -> x)
 let ( >> ) f g () = { f = (fun z -> (f ()).f ((g ()).f z)) }
+
 let fst () = { f = (fun k (a, x) r -> k a (fun b -> r (b, x))) }
 let snd () = { f = (fun k (x, b) r -> k b (fun a -> r (x, a))) }
 
