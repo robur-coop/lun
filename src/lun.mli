@@ -356,3 +356,4 @@ val id : ('a, 'b, 'a, 'b) t
 val fst : ('a * 'x, 'b * 'x, 'a, 'b) t
 val snd : ('x * 'a, 'x * 'b, 'a, 'b) t
 val some : ('a option, 'b option, 'a, 'b) t
+val nth : int -> ('a list, 'a list, 'a, 'a) t
