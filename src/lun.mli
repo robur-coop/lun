@@ -271,6 +271,9 @@ val prism : ('b -> 't) -> ('s -> ('a, 't) result) -> ('s, 't, 'a, 'b) s
         | v -> Error v
     ]} *)
 
+val optional :
+  ('s -> 'b -> 't) -> ('s -> ('a, 't) result) -> ('s, 't, 'a, 'b) s
+
 exception Undefined
 (** An exception raised by {!val:get} when it's not possible to project a value
     with an optic. *)

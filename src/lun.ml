@@ -20,6 +20,13 @@ let prism f g =
   in
   { f }
 
+let optional f g =
+  let f k s r =
+    let ok x = k x (fun b -> r (f s b)) and error = r in
+    Result.fold (g s) ~error ~ok
+  in
+  { f }
+
 let get f t = (f ()).f (fun v _ -> v) t never
 let get_opt f t = (f ()).f (fun v _ -> Some v) t (Fun.const Option.none)
 let setf o ~f t = (o ()).f (fun a rf -> rf (f a)) t (fun r -> r)
