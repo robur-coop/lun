@@ -7,8 +7,8 @@
  (package ppx_lun))
 
 (tests
- (names readme)
- (modules readme)
+ (names readme patterns)
+ (modules readme patterns)
  (preprocess
   (pps ppx_lun))
  (package ppx_lun))
