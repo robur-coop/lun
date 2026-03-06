@@ -35,3 +35,11 @@ let some () =
   prism Option.some @@ function
   | Some x -> Result.ok x
   | None as x -> Result.error x
+
+let rec set_nth i l elt = match i, l with
+  | _, [] -> []
+  | 0, _h :: t -> elt :: t
+  | n, h :: t -> h :: set_nth (n-1) t elt
+let get_nth i l =
+  match List.nth_opt l i with Some v -> v | None -> raise Undefined
+let nth i () = lense (get_nth i) (set_nth i)
