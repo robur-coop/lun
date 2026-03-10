@@ -320,14 +320,17 @@ let find_vars =
   end
   in fun p -> List.rev (o#pattern p [])
 
-(** Replace all the _ in a pattern by a variable. *)
-let rename_any_in_pat = object
+(** Replace all open patterns by a variable. *)
+let rename_open_in_pat = object
   inherit Ast_traverse.map as super
   method! pattern p =
     let loc = p.ppat_loc in
+    let var = Located.mk ~loc @@ var "b" in
     match p.ppat_desc with
     | Ppat_any ->
-      {p with ppat_desc = Ppat_var (Located.mk ~loc @@ var "b")}
+      {p with ppat_desc = Ppat_var var}
+    | Ppat_record (_, Open) ->
+      ppat_alias ~loc p var
     | _ -> super#pattern p
 end
 
@@ -360,6 +363,9 @@ let rec pat_to_constr p =
   | Ppat_record (fields, Closed) ->
     let fields = List.map ~f:(fun (l, p) -> l, pat_to_constr p) fields in
     pexp_record ~loc fields None
+  | Ppat_alias ({ppat_desc = Ppat_record (fields, Open); _}, v) ->
+    let fields = List.map ~f:(fun (l, p) -> l, pat_to_constr p) fields in
+    pexp_record ~loc fields (Some (pexp_ident ~loc @@ Located.map_lident v))
   | Ppat_array ps ->
     let es = List.map ~f:pat_to_constr ps in
     pexp_array ~loc es
@@ -416,7 +422,7 @@ let optic_of_pattern ~ctxt pat guard =
   in
   let inj =
     let varoutter = var "s" in
-    let p = rename_any_in_pat#pattern pat in
+    let p = rename_open_in_pat#pattern pat in
     let e = pat_to_constr p in
     let main_case =
       let lhs = (erase_vars_in_pat @@ List.map ~f:Loc.txt l)#pattern p in
