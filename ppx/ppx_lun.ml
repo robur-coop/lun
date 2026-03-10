@@ -363,20 +363,37 @@ let rec pat_to_constr p =
   | Ppat_array ps ->
     let es = List.map ~f:pat_to_constr ps in
     pexp_array ~loc es
+  | Ppat_constant c ->
+    pexp_constant ~loc c
+  | Ppat_constraint (p, ty) ->
+    pexp_constraint ~loc (pat_to_constr p) ty
+  | Ppat_open (l, p) ->
+    pexp_open ~loc (H.Opn.mk ~loc (pmod_ident ~loc l)) (pat_to_constr p)
+  | Ppat_alias (p', var) ->
+    let var = Located.map_lident var in
+    let vars = find_vars p' in
+    if List.is_empty vars then
+      pexp_ident ~loc var
+    else
+      let warning =
+        attribute_of_warning p'.ppat_loc
+          "Variables in a pattern under an alias are ignored"
+      in
+      H.Exp.ident ~attrs:[warning] ~loc var
+  | Ppat_or (p1, _) ->
+    pat_to_constr p1
   | Ppat_extension ex ->
     pexp_extension ~loc ex
   (* Unsupported cases *)
   | Ppat_record (_, Open)
-  | Ppat_alias (_, _)
-  | Ppat_constant _
-  | Ppat_interval (_, _)
-  | Ppat_or (_, _)
-  | Ppat_constraint  (_, _)
-  | Ppat_type _
+  | Ppat_interval (_, _) ->
+    pexp_extension ~loc @@
+    Location.error_extensionf ~loc
+      "This pattern has implicit open variables. Please use an alias to bind its content."
   | Ppat_lazy _
   | Ppat_unpack _
-  | Ppat_exception _
-  | Ppat_open (_, _) ->
+  | Ppat_type _
+  | Ppat_exception _ ->
     pexp_extension ~loc @@
     Location.error_extensionf ~loc
       "This feature is not supported in lun patterns"
