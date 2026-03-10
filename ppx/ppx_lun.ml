@@ -404,16 +404,25 @@ let rec pat_to_constr p =
     Location.error_extensionf ~loc
       "This feature is not supported in lun patterns"
 
+let tuple_of_list ~loc l = match l with
+  | [] -> eunit ~loc, punit ~loc
+  | [x] ->
+    pexp_ident ~loc @@ Located.map_lident x,
+    ppat_var ~loc x
+  | l ->
+    pexp_tuple ~loc
+      (List.map ~f:(fun v -> pexp_ident ~loc @@ Located.map_lident v) l),
+    ppat_tuple ~loc @@ List.map ~f:(ppat_var ~loc) l
+
 let optic_of_pattern ~ctxt pat guard =
   let loc = Expansion_context.Extension.extension_point_loc ctxt in
   let l = find_vars pat in
+  let evars, pvars = tuple_of_list ~loc l in
   let prj =
     let rhs =
       pexp_apply ~loc
         (pexp_ident ~loc { loc; txt = lident "Result" $. "ok" })
-        [Nolabel,
-         pexp_tuple ~loc
-           (List.map ~f:(fun v -> pexp_ident ~loc @@ Located.map_lident v) l)]
+        [Nolabel, evars]
     in
     let c = case ~lhs:pat ~guard ~rhs in
     H.Exp.function_
@@ -436,8 +445,7 @@ let optic_of_pattern ~ctxt pat guard =
     in
     pexp_function ~loc
       [ pparam_val ~loc Nolabel None @@ pvar ~loc varoutter;
-        pparam_val ~loc Nolabel None @@
-        ppat_tuple ~loc @@ List.map ~f:(ppat_var ~loc) l ]
+        pparam_val ~loc Nolabel None @@ pvars ]
       None
       (Pfunction_body
          (H.Exp.match_
