@@ -425,7 +425,7 @@ let tuple_of_list ~loc l = match l with
       (List.map ~f:(fun v -> pexp_ident ~loc @@ Located.map_lident v) l),
     ppat_tuple ~loc @@ List.map ~f:(ppat_var ~loc) l
 
-let mk_full_prj ~loc pat_outter guard expr_inner =
+let mk_total_prj ~loc pat_outter guard expr_inner =
   let guard =
     Option.map (fun g ->
         let loc = g.pexp_loc in
@@ -457,7 +457,7 @@ let mk_constructor ~loc pat_outter pat_inner =
     None
     (Pfunction_body rhs)
 
-let mk_full_setter ~loc pat_outter pat_inner captured_vars =
+let mk_total_setter ~loc pat_outter pat_inner captured_vars =
   let rhs = pat_to_constr pat_outter in
   let all_vars = List.map ~f:Loc.txt captured_vars in
   let lhs = (erase_vars_in_pat all_vars)#pattern pat_outter in
@@ -501,10 +501,10 @@ let lense_of_pattern ~ctxt pat guard =
   let loc = Expansion_context.Extension.extension_point_loc ctxt in
   let l = find_vars pat in
   let evars, pvars = tuple_of_list ~loc l in
-  let prj = mk_full_prj ~loc pat guard evars in
+  let prj = mk_total_prj ~loc pat guard evars in
   let inj =
     let p = alias_open_in_pat#pattern pat in
-    mk_full_setter ~loc p pvars l
+    mk_total_setter ~loc p pvars l
   in
   mk_from_prj_inj ~loc "lense" [prj; inj]
 
@@ -519,7 +519,7 @@ let prism_of_pattern ~ctxt pat guard =
   in
   mk_from_prj_inj ~loc "prism" [inj; prj]
 
-let optic_of_pattern ~ctxt pat guard =
+let optional_of_pattern ~ctxt pat guard =
   let loc = Expansion_context.Extension.extension_point_loc ctxt in
   let l = find_vars pat in
   let evars, pvars = tuple_of_list ~loc l in
@@ -530,27 +530,49 @@ let optic_of_pattern ~ctxt pat guard =
   in
   mk_from_prj_inj ~loc "optional" [inj; prj]
 
-let optic_pattern =
-  Extension.V3.declare "lun"
-    Extension.Context.expression
-    Ast_pattern.(ppat __ __)
-    optic_of_pattern
+(** Check if a pattern is a constructor, i.e., it doesn't have
+    open subpatterns. *)
+let is_constructor p = object
+  inherit [bool] Ast_traverse.fold as super
+  method! pattern p b =
+    match p.ppat_desc with
+    | Ppat_any | Ppat_record (_, Open) -> false
+    | _ -> super#pattern p b
+end#pattern p true
 
-let lense_pattern =
-  Extension.V3.declare "lun.lense"
-    Extension.Context.expression
-    Ast_pattern.(ppat __ __)
-    lense_of_pattern
+(** Check if a pattern is trivially total/irrefutable, i.e. it doesn't
+    have sum constructors.
+    This doesn't catch single sum types. *)
+let is_total p = object
+  inherit [bool] Ast_traverse.fold as super
+  method! pattern p b =
+    match p.ppat_desc with
+    | Ppat_constant _
+    | Ppat_interval _
+    | Ppat_construct _
+    | Ppat_variant _ -> false
+    | _ -> super#pattern p b
+end#pattern p true
 
-let prism_pattern =
-  Extension.V3.declare "lun.prism"
-    Extension.Context.expression
-    Ast_pattern.(ppat __ __)
-    prism_of_pattern
+let optics_of_pattern ~ctxt pat guard =
+  let constructor = is_constructor pat in
+  let total = is_total pat && Option.is_none guard in
+  match total, constructor with
+  | true, _ -> lense_of_pattern ~ctxt pat guard
+  | _, true -> prism_of_pattern ~ctxt pat guard
+  | false, false -> optional_of_pattern ~ctxt pat guard
 
 let () =
-  Driver.register_transformation ~rules:[
-    Context_free.Rule.extension optic_pattern;
-    Context_free.Rule.extension lense_pattern;
-    Context_free.Rule.extension prism_pattern;
-  ] "lun"
+  let rules =
+    List.map
+      ~f:(fun (s,f) ->
+          Context_free.Rule.extension @@
+          Extension.V3.declare s
+            Extension.Context.expression Ast_pattern.(ppat __ __) f)
+      [ "lun.lense", lense_of_pattern;
+        "lun.prism", prism_of_pattern;
+        "lun.optional", optional_of_pattern;
+        "lun", optics_of_pattern;
+      ]
+  in
+  Driver.register_transformation ~rules "lun"
