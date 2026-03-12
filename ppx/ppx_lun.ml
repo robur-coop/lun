@@ -415,86 +415,92 @@ let tuple_of_list ~loc l = match l with
       (List.map ~f:(fun v -> pexp_ident ~loc @@ Located.map_lident v) l),
     ppat_tuple ~loc @@ List.map ~f:(ppat_var ~loc) l
 
-
-let lense_of_pattern ~ctxt pat guard =
+let mk_full_prj ~loc pat_outter guard expr_inner =
   let guard =
     Option.map (fun g ->
         let loc = g.pexp_loc in
         pexp_extension ~loc @@
         Location.error_extensionf ~loc
-          "Lenses should be total, guards are not allowed. Use a full lun pattern."
+          "This optic was expected to be total. To use guards, use a full lun pattern instead."
       ) guard
-  in        
-  let loc = Expansion_context.Extension.extension_point_loc ctxt in
-  let l = find_vars pat in
-  let evars, pvars = tuple_of_list ~loc l in
-  let prj =
-    let rhs = evars in
-    let c = case ~lhs:pat ~guard ~rhs in
-    H.Exp.function_ ~loc [ c ]
   in
-  let inj =
-    let p = rename_open_in_pat#pattern pat in
-    let rhs = pat_to_constr p in
-    let all_vars = List.map ~f:Loc.txt l in
-    let lhs = (erase_vars_in_pat all_vars)#pattern p in
-    pexp_function ~loc
-      [ pparam_val ~loc Nolabel None @@ lhs;
-        pparam_val ~loc Nolabel None @@ pvars ]
-      None
-      (Pfunction_body rhs)
+  let lhs = pat_outter in
+  let rhs = expr_inner in
+  H.Exp.function_ ~loc [ case ~lhs ~guard ~rhs ]
+
+let mk_partial_prj ~loc pat_outter guard expr_inner =
+  let lhs = pat_outter in
+  let rhs =
+    pexp_apply ~loc
+      (pexp_ident ~loc { loc; txt = lident "Result" $. "ok" })
+      [Nolabel, expr_inner]
   in
+  H.Exp.function_
+    ~loc ~attrs:[attr_set_warning ~loc "-11"]
+    [ case ~lhs ~guard ~rhs ;
+      error_case ~loc ]
+
+let mk_full_setter ~loc pat_outter pat_inner captured_vars =
+  let rhs = pat_to_constr pat_outter in
+  let all_vars = List.map ~f:Loc.txt captured_vars in
+  let lhs = (erase_vars_in_pat all_vars)#pattern pat_outter in
+  pexp_function ~loc
+    [ pparam_val ~loc Nolabel None @@ lhs;
+      pparam_val ~loc Nolabel None @@ pat_inner ]
+    None
+    (Pfunction_body rhs)
+
+let mk_partial_setter ~loc pat_outter guard pat_inner captured_vars =
+  let varoutter = var "s" in
+  let all_vars = List.map ~f:Loc.txt captured_vars in
+  let main_case =
+    let lhs = (erase_vars_in_pat all_vars)#pattern pat_outter in
+    let rhs = pat_to_constr pat_outter in
+    case ~lhs ~guard ~rhs
+  in
+  let id_case =
+    let lhs = ppat_any ~loc in
+    let rhs = evar ~loc varoutter in
+    case ~lhs ~guard:None ~rhs
+  in
+  pexp_function ~loc
+    [ pparam_val ~loc Nolabel None @@ pvar ~loc varoutter;
+      pparam_val ~loc Nolabel None @@ pat_inner ]
+    None
+    (Pfunction_body
+       (H.Exp.match_
+          ~loc ~attrs:[attr_set_warning ~loc "-11"]
+          (evar ~loc varoutter) [main_case; id_case]))
+
+let mk_from_prj_inj ~loc lun_builder ~prj ~inj = 
   pexp_constraint ~loc
     (pexp_fun ~loc Nolabel None (punit ~loc)
        (pexp_apply ~loc
-          (pexp_ident ~loc { loc; txt = lun $. "lense" })
+          (pexp_ident ~loc { loc; txt = lun $. lun_builder })
           [ (Nolabel, prj) ; (Nolabel, inj) ]))
     (ptyp_constr ~loc (Located.mk ~loc (lun $. "t")) [ptyp_any ~loc])
+
+let lense_of_pattern ~ctxt pat guard =
+  let loc = Expansion_context.Extension.extension_point_loc ctxt in
+  let l = find_vars pat in
+  let evars, pvars = tuple_of_list ~loc l in
+  let prj = mk_full_prj ~loc pat guard evars in
+  let inj =
+    let p = rename_open_in_pat#pattern pat in
+    mk_full_setter ~loc p pvars l
+  in
+  mk_from_prj_inj ~loc "lense" ~prj ~inj
 
 let optic_of_pattern ~ctxt pat guard =
   let loc = Expansion_context.Extension.extension_point_loc ctxt in
   let l = find_vars pat in
   let evars, pvars = tuple_of_list ~loc l in
-  let prj =
-    let rhs =
-      pexp_apply ~loc
-        (pexp_ident ~loc { loc; txt = lident "Result" $. "ok" })
-        [Nolabel, evars]
-    in
-    let c = case ~lhs:pat ~guard ~rhs in
-    H.Exp.function_
-      ~loc ~attrs:[attr_set_warning ~loc "-11"]
-      [ c ; error_case ~loc ]
-  in
+  let prj = mk_partial_prj ~loc pat guard evars in
   let inj =
-    let varoutter = var "s" in
     let p = rename_open_in_pat#pattern pat in
-    let e = pat_to_constr p in
-    let main_case =
-      let lhs = (erase_vars_in_pat @@ List.map ~f:Loc.txt l)#pattern p in
-      let rhs = e in
-      case ~lhs ~guard ~rhs
-    in
-    let id_case =
-      let lhs = ppat_any ~loc in
-      let rhs = evar ~loc varoutter in
-      case ~lhs ~guard:None ~rhs
-    in
-    pexp_function ~loc
-      [ pparam_val ~loc Nolabel None @@ pvar ~loc varoutter;
-        pparam_val ~loc Nolabel None @@ pvars ]
-      None
-      (Pfunction_body
-         (H.Exp.match_
-            ~loc ~attrs:[attr_set_warning ~loc "-11"]
-            (evar ~loc varoutter) [main_case; id_case]))
+    mk_partial_setter ~loc p guard pvars l
   in
-  pexp_constraint ~loc
-    (pexp_fun ~loc Nolabel None (punit ~loc)
-       (pexp_apply ~loc
-          (pexp_ident ~loc { loc; txt = lun $. "optional" })
-          [ (Nolabel, inj); (Nolabel, prj) ]))
-    (ptyp_constr ~loc (Located.mk ~loc (lun $. "t")) [ptyp_any ~loc])
+  mk_from_prj_inj ~loc "optional" ~prj ~inj
 
 let optic_pattern =
   Extension.V3.declare "lun"
