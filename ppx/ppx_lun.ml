@@ -415,6 +415,42 @@ let tuple_of_list ~loc l = match l with
       (List.map ~f:(fun v -> pexp_ident ~loc @@ Located.map_lident v) l),
     ppat_tuple ~loc @@ List.map ~f:(ppat_var ~loc) l
 
+
+let lense_of_pattern ~ctxt pat guard =
+  let guard =
+    Option.map (fun g ->
+        let loc = g.pexp_loc in
+        pexp_extension ~loc @@
+        Location.error_extensionf ~loc
+          "Lenses should be total, guards are not allowed. Use a full lun pattern."
+      ) guard
+  in        
+  let loc = Expansion_context.Extension.extension_point_loc ctxt in
+  let l = find_vars pat in
+  let evars, pvars = tuple_of_list ~loc l in
+  let prj =
+    let rhs = evars in
+    let c = case ~lhs:pat ~guard ~rhs in
+    H.Exp.function_ ~loc [ c ]
+  in
+  let inj =
+    let p = rename_open_in_pat#pattern pat in
+    let rhs = pat_to_constr p in
+    let all_vars = List.map ~f:Loc.txt l in
+    let lhs = (erase_vars_in_pat all_vars)#pattern p in
+    pexp_function ~loc
+      [ pparam_val ~loc Nolabel None @@ lhs;
+        pparam_val ~loc Nolabel None @@ pvars ]
+      None
+      (Pfunction_body rhs)
+  in
+  pexp_constraint ~loc
+    (pexp_fun ~loc Nolabel None (punit ~loc)
+       (pexp_apply ~loc
+          (pexp_ident ~loc { loc; txt = lun $. "lense" })
+          [ (Nolabel, prj) ; (Nolabel, inj) ]))
+    (ptyp_constr ~loc (Located.mk ~loc (lun $. "t")) [ptyp_any ~loc])
+
 let optic_of_pattern ~ctxt pat guard =
   let loc = Expansion_context.Extension.extension_point_loc ctxt in
   let l = find_vars pat in
@@ -460,15 +496,20 @@ let optic_of_pattern ~ctxt pat guard =
           [ (Nolabel, inj); (Nolabel, prj) ]))
     (ptyp_constr ~loc (Located.mk ~loc (lun $. "t")) [ptyp_any ~loc])
 
-let extracter () = Ast_pattern.(ppat __ __)
-
 let optic_pattern =
   Extension.V3.declare "lun"
     Extension.Context.expression
-    (extracter ())
+    Ast_pattern.(ppat __ __)
     optic_of_pattern
+
+let lense_pattern =
+  Extension.V3.declare "lun.lense"
+    Extension.Context.expression
+    Ast_pattern.(ppat __ __)
+    lense_of_pattern
 
 let () =
   Driver.register_transformation ~rules:[
-    Context_free.Rule.extension optic_pattern
+    Context_free.Rule.extension optic_pattern;
+    Context_free.Rule.extension lense_pattern;
   ] "lun"
