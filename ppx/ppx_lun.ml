@@ -386,13 +386,13 @@ let rec pat_to_constr p =
           "Variables in a pattern under an alias are ignored"
       in
       H.Exp.ident ~attrs:[warning] ~loc var
+  | Ppat_interval (c, _) -> pexp_constant ~loc c
   | Ppat_or (p1, _) ->
     pat_to_constr p1
   | Ppat_extension ex ->
     pexp_extension ~loc ex
   (* Unsupported cases *)
-  | Ppat_record (_, Open)
-  | Ppat_interval (_, _) ->
+  | Ppat_record (_, Open)->
     pexp_extension ~loc @@
     Location.error_extensionf ~loc
       "This pattern has implicit open variables. Please use an alias to bind its content."
