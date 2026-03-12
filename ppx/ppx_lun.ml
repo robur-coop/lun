@@ -330,7 +330,7 @@ let rename_open_in_pat = object
     | Ppat_any ->
       {p with ppat_desc = Ppat_var var}
     | Ppat_record (_, Open) ->
-      ppat_alias ~loc p var
+      ppat_alias ~loc (super#pattern p) var
     | _ -> super#pattern p
 end
 

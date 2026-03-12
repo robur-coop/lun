@@ -12,7 +12,7 @@ let () =
   Fmt.pr "%d\n" (get [%lun? {foo; _}] v) ;
   Fmt.pr "%s\n" (get [%lun? {bar; foo = _}] v) ;
   let v = { nested = v; baz = 0.1 } in
-  Fmt.pr "%d\n" (get [%lun? {nested = { foo ; _}; baz = _}] v) ;
+  Fmt.pr "%d\n" (get [%lun? {nested = { foo ; _}; _}] v) ;
   Fmt.pr "%f\n" (get [%lun? {baz; _}] v) ;
   assert (get [%lun? A] A = ()) ;
   assert (get [%lun? B(x,y)] (B (1, 2)) = (1, 2)) ;
