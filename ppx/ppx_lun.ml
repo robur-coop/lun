@@ -320,19 +320,30 @@ let find_vars =
   end
   in fun p -> List.rev (o#pattern p [])
 
-(** Replace all open patterns by a variable. *)
-let rename_open_in_pat = object
+(** Replace all open patterns. *)
+let map_open_in_pat f = object
   inherit Ast_traverse.map as super
   method! pattern p =
     let loc = p.ppat_loc in
-    let var = Located.mk ~loc @@ var "b" in
     match p.ppat_desc with
-    | Ppat_any ->
-      {p with ppat_desc = Ppat_var var}
+    | Ppat_any
     | Ppat_record (_, Open) ->
-      ppat_alias ~loc (super#pattern p) var
+      f ~loc (super#pattern p)
     | _ -> super#pattern p
 end
+(* Replace by a variable. *)
+let alias_open_in_pat =
+  map_open_in_pat (fun ~loc p ->
+      let var = Located.mk ~loc @@ var "b" in
+      ppat_alias ~loc p var
+    )
+(* Replace by an error. *)
+let forbid_open_in_pat = 
+  map_open_in_pat (fun ~loc _p ->
+      ppat_extension ~loc @@
+      Location.error_extensionf ~loc
+        "This optic is expected to bind its full content. To use open patterns, use a full lun pattern instead. "
+    )
 
 (** Replace the given variables by _ in a pattern. *)
 let erase_vars_in_pat set = object
@@ -347,8 +358,6 @@ end
 let rec pat_to_constr p =
   let loc = p.ppat_loc in
   match p.ppat_desc with
-  (* Should have been removed by {!rename_any_in_pat} *)
-  | Ppat_any -> assert false
   (* Valid cases *)
   | Ppat_var v -> pexp_ident ~loc (Located.map_lident v)
   | Ppat_tuple ps ->
@@ -394,6 +403,7 @@ let rec pat_to_constr p =
   | Ppat_extension ex ->
     pexp_extension ~loc ex
   (* Unsupported cases *)
+  | Ppat_any
   | Ppat_record (_, Open)->
     pexp_extension ~loc @@
     Location.error_extensionf ~loc
@@ -421,7 +431,7 @@ let mk_full_prj ~loc pat_outter guard expr_inner =
         let loc = g.pexp_loc in
         pexp_extension ~loc @@
         Location.error_extensionf ~loc
-          "This optic was expected to be total. To use guards, use a full lun pattern instead."
+          "This optic is expected to be total. To use guards, use a full lun pattern instead."
       ) guard
   in
   let lhs = pat_outter in
@@ -439,6 +449,13 @@ let mk_partial_prj ~loc pat_outter guard expr_inner =
     ~loc ~attrs:[attr_set_warning ~loc "-11"]
     [ case ~lhs ~guard ~rhs ;
       error_case ~loc ]
+
+let mk_constructor ~loc pat_outter pat_inner = 
+  let rhs = pat_to_constr pat_outter in
+  pexp_function ~loc
+    [ pparam_val ~loc Nolabel None @@ pat_inner ]
+    None
+    (Pfunction_body rhs)
 
 let mk_full_setter ~loc pat_outter pat_inner captured_vars =
   let rhs = pat_to_constr pat_outter in
@@ -472,12 +489,12 @@ let mk_partial_setter ~loc pat_outter guard pat_inner captured_vars =
           ~loc ~attrs:[attr_set_warning ~loc "-11"]
           (evar ~loc varoutter) [main_case; id_case]))
 
-let mk_from_prj_inj ~loc lun_builder ~prj ~inj = 
+let mk_from_prj_inj ~loc lun_builder args = 
   pexp_constraint ~loc
     (pexp_fun ~loc Nolabel None (punit ~loc)
        (pexp_apply ~loc
           (pexp_ident ~loc { loc; txt = lun $. lun_builder })
-          [ (Nolabel, prj) ; (Nolabel, inj) ]))
+          (List.map ~f:(fun f -> Nolabel, f) args)))
     (ptyp_constr ~loc (Located.mk ~loc (lun $. "t")) [ptyp_any ~loc])
 
 let lense_of_pattern ~ctxt pat guard =
@@ -486,10 +503,21 @@ let lense_of_pattern ~ctxt pat guard =
   let evars, pvars = tuple_of_list ~loc l in
   let prj = mk_full_prj ~loc pat guard evars in
   let inj =
-    let p = rename_open_in_pat#pattern pat in
+    let p = alias_open_in_pat#pattern pat in
     mk_full_setter ~loc p pvars l
   in
-  mk_from_prj_inj ~loc "lense" ~prj ~inj
+  mk_from_prj_inj ~loc "lense" [prj; inj]
+
+let prism_of_pattern ~ctxt pat guard =
+  let loc = Expansion_context.Extension.extension_point_loc ctxt in
+  let l = find_vars pat in
+  let evars, pvars = tuple_of_list ~loc l in
+  let prj = mk_partial_prj ~loc pat guard evars in
+  let inj =
+    let p = forbid_open_in_pat#pattern pat in
+    mk_constructor ~loc p pvars
+  in
+  mk_from_prj_inj ~loc "prism" [inj; prj]
 
 let optic_of_pattern ~ctxt pat guard =
   let loc = Expansion_context.Extension.extension_point_loc ctxt in
@@ -497,10 +525,10 @@ let optic_of_pattern ~ctxt pat guard =
   let evars, pvars = tuple_of_list ~loc l in
   let prj = mk_partial_prj ~loc pat guard evars in
   let inj =
-    let p = rename_open_in_pat#pattern pat in
+    let p = alias_open_in_pat#pattern pat in
     mk_partial_setter ~loc p guard pvars l
   in
-  mk_from_prj_inj ~loc "optional" ~prj ~inj
+  mk_from_prj_inj ~loc "optional" [inj; prj]
 
 let optic_pattern =
   Extension.V3.declare "lun"
@@ -514,8 +542,15 @@ let lense_pattern =
     Ast_pattern.(ppat __ __)
     lense_of_pattern
 
+let prism_pattern =
+  Extension.V3.declare "lun.prism"
+    Extension.Context.expression
+    Ast_pattern.(ppat __ __)
+    prism_of_pattern
+
 let () =
   Driver.register_transformation ~rules:[
     Context_free.Rule.extension optic_pattern;
     Context_free.Rule.extension lense_pattern;
+    Context_free.Rule.extension prism_pattern;
   ] "lun"

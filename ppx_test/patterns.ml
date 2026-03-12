@@ -19,16 +19,18 @@ let () =
   Fmt.pr "%f\n" (get [%lun.lense? {baz; _}] v) ;
   Fmt.pr "%f\n" (get [%lun? {baz; _}] v) ;
   assert (get [%lun.lense? A] A = ()) ;
+  assert (get [%lun.prism? A] A = ()) ;
   assert (get [%lun? A] A = ()) ;
   assert (get [%lun.lense? B(x,y)] (B (1, 2)) = (1, 2)) ;
+  assert (get [%lun.prism? B(x,y)] (B (1, 2)) = (1, 2)) ;
   assert (get [%lun? B(x,y)] (B (1, 2)) = (1, 2)) ;
   assert (get [%lun.lense? C x] (C (1, 2)) = (1, 2)) ;
   assert (get [%lun? C x] (C (1, 2)) = (1, 2)) ;
-  assert (get [%lun.lense? X] X = ()) ;
+  assert (get [%lun.prism? X] X = ()) ;
   assert (get [%lun? X] X = ()) ;
   assert (get_opt [%lun? Y] X = None) ;
   assert (get_opt [%lun? Z] Z = Some ()) ;
-  Fmt.pr "%d\n" (get [%lun? B(x,_)] (B (1, 2))) ;
+  Fmt.pr "%d\n" (get [%lun? B(x,_) when x < 4] (B (1, 2))) ;
   Fmt.pr "%d\n" (get [%lun? B(_,x)] (B (1, 2))) ;
   let v0 = { v = 0 } in
   let v1 = setf ~f:succ [%lun? {v}] v0 in
@@ -37,3 +39,8 @@ let () =
   v1.v <- 2 ;
   assert (v0.v = 0) ;
   assert (v1.v = 2)
+
+let _errors = 
+  let open Lun in
+  assert (get [%lun.lense? X] X = ()) ;
+  Fmt.pr "%d\n" (get [%lun.prism? B(x,_)] (B (1, 2))) ;
