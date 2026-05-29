@@ -1,6 +1,6 @@
 (tests
- (names basic)
- (modules basic)
+ (names basic patterns)
+ (modules basic patterns)
  (libraries fmt)
  (preprocess
   (pps ppx_lun))

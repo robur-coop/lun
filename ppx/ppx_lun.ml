@@ -1,11 +1,18 @@
 open Ppxlib
 module List = ListLabels
 open Ast_builder.Default
+module H = Ast_helper
 
 let ( $. ) l x = Longident.Ldot (l, x)
 let lun = Longident.Lident "Lun"
 let unit = lident "unit"
 let str fmt = Format.kasprintf Fun.id fmt
+
+let attr_set_warning ~loc s =
+  attribute ~loc ~name:(Located.mk ~loc "warning")
+    ~payload:(PStr [pstr_eval ~loc (estring ~loc s) []])
+let set_warning s e =
+  H.Exp.attr e (attr_set_warning ~loc:e.pexp_loc s)
 
 let random_string ~len =
   let res = Bytes.create len in
@@ -299,3 +306,273 @@ let intf_generator = Deriving.Generator.V2.make_noarg generate_intf
 
 let my_deriver =
   Deriving.add "lun" ~str_type_decl:impl_generator ~sig_type_decl:intf_generator
+
+(** Pattern-based lun construction *)
+
+(** Return all the variables in a pattern. *)
+let find_vars =
+  let o = object
+    inherit [_] Ast_traverse.fold as super
+    method! pattern p acc =
+      match p.ppat_desc with
+      | Ppat_var l -> l :: acc
+      | _ -> super#pattern p acc
+  end
+  in fun p -> List.rev (o#pattern p [])
+
+(** Replace all open patterns. *)
+let map_open_in_pat f = object
+  inherit Ast_traverse.map as super
+  method! pattern p =
+    let loc = p.ppat_loc in
+    match p.ppat_desc with
+    | Ppat_any
+    | Ppat_record (_, Open) ->
+      f ~loc (super#pattern p)
+    | _ -> super#pattern p
+end
+(* Replace by a variable. *)
+let alias_open_in_pat =
+  map_open_in_pat (fun ~loc p ->
+      let var = Located.mk ~loc @@ var "b" in
+      ppat_alias ~loc p var
+    )
+(* Replace by an error. *)
+let forbid_open_in_pat = 
+  map_open_in_pat (fun ~loc _p ->
+      ppat_extension ~loc @@
+      Location.error_extensionf ~loc
+        "This optic is expected to bind its full content. To use open patterns, use a full lun pattern instead. "
+    )
+
+(** Replace the given variables by _ in a pattern. *)
+let erase_vars_in_pat set = object
+  inherit Ast_traverse.map as super
+  method! pattern p =
+    let loc = p.ppat_loc in
+    match p.ppat_desc with
+    | Ppat_var l when List.mem l.txt ~set -> ppat_any ~loc
+    | _ -> super#pattern p
+end
+
+let rec pat_to_constr p =
+  let loc = p.ppat_loc in
+  match p.ppat_desc with
+  (* Valid cases *)
+  | Ppat_var v -> pexp_ident ~loc (Located.map_lident v)
+  | Ppat_tuple ps ->
+    let es = List.map ~f:pat_to_constr ps in
+    pexp_tuple ~loc es
+  | Ppat_construct (c, None) ->
+    pexp_construct ~loc c None
+  | Ppat_construct (c, Some (_,p)) ->
+    pexp_construct ~loc c (Some (pat_to_constr p))
+  | Ppat_variant (c, p) -> 
+    pexp_variant ~loc c (Option.map pat_to_constr p)
+  | Ppat_record (fields, Closed) ->
+    let fields = List.map ~f:(fun (l, p) -> l, pat_to_constr p) fields in
+    pexp_record ~loc fields None
+  | Ppat_alias ({ppat_desc = Ppat_record (fields, Open); _}, v) ->
+    let fields = List.map ~f:(fun (l, p) -> l, pat_to_constr p) fields in
+    pexp_record ~loc fields (Some (pexp_ident ~loc @@ Located.map_lident v))
+  | Ppat_array ps ->
+    let es = List.map ~f:pat_to_constr ps in
+    pexp_array ~loc es
+  | Ppat_constant c ->
+    pexp_constant ~loc c
+  | Ppat_constraint (p, ty) ->
+    pexp_constraint ~loc (pat_to_constr p) ty
+  | Ppat_open (l, p) ->
+    pexp_open ~loc (H.Opn.mk ~loc (pmod_ident ~loc l)) (pat_to_constr p)
+  | Ppat_alias (p', var) ->
+    let var = Located.map_lident var in
+    let vars = find_vars p' in
+    if List.is_empty vars then
+      pexp_ident ~loc var
+    else
+      let warning =
+        attribute_of_warning p'.ppat_loc
+          "Variables in a pattern under an alias are ignored"
+      in
+      H.Exp.ident ~attrs:[warning] ~loc var
+  | Ppat_lazy p ->
+    pexp_lazy ~loc (pat_to_constr p)
+  | Ppat_interval (c, _) -> pexp_constant ~loc c
+  | Ppat_or (p1, _) ->
+    pat_to_constr p1
+  | Ppat_extension ex ->
+    pexp_extension ~loc ex
+  (* Unsupported cases *)
+  | Ppat_any
+  | Ppat_record (_, Open)->
+    pexp_extension ~loc @@
+    Location.error_extensionf ~loc
+      "This pattern has implicit open variables. Please use an alias to bind its content."
+  | Ppat_unpack _
+  | Ppat_type _
+  | Ppat_exception _ ->
+    pexp_extension ~loc @@
+    Location.error_extensionf ~loc
+      "This feature is not supported in lun patterns"
+
+let tuple_of_list ~loc l = match l with
+  | [] -> eunit ~loc, punit ~loc
+  | [x] ->
+    pexp_ident ~loc @@ Located.map_lident x,
+    ppat_var ~loc x
+  | l ->
+    pexp_tuple ~loc
+      (List.map ~f:(fun v -> pexp_ident ~loc @@ Located.map_lident v) l),
+    ppat_tuple ~loc @@ List.map ~f:(ppat_var ~loc) l
+
+let mk_total_prj ~loc pat_outter guard expr_inner =
+  let guard =
+    Option.map (fun g ->
+        let loc = g.pexp_loc in
+        pexp_extension ~loc @@
+        Location.error_extensionf ~loc
+          "This optic is expected to be total. To use guards, use a full lun pattern instead."
+      ) guard
+  in
+  let lhs = pat_outter in
+  let rhs = expr_inner in
+  H.Exp.function_ ~loc [ case ~lhs ~guard ~rhs ]
+
+let mk_partial_prj ~loc pat_outter guard expr_inner =
+  let lhs = pat_outter in
+  let rhs =
+    pexp_apply ~loc
+      (pexp_ident ~loc { loc; txt = lident "Result" $. "ok" })
+      [Nolabel, expr_inner]
+  in
+  H.Exp.function_
+    ~loc ~attrs:[attr_set_warning ~loc "-11"]
+    [ case ~lhs ~guard ~rhs ;
+      error_case ~loc ]
+
+let mk_constructor ~loc pat_outter pat_inner = 
+  let rhs = pat_to_constr pat_outter in
+  pexp_function ~loc
+    [ pparam_val ~loc Nolabel None @@ pat_inner ]
+    None
+    (Pfunction_body rhs)
+
+let mk_total_setter ~loc pat_outter pat_inner captured_vars =
+  let rhs = pat_to_constr pat_outter in
+  let all_vars = List.map ~f:Loc.txt captured_vars in
+  let lhs = (erase_vars_in_pat all_vars)#pattern pat_outter in
+  pexp_function ~loc
+    [ pparam_val ~loc Nolabel None @@ lhs;
+      pparam_val ~loc Nolabel None @@ pat_inner ]
+    None
+    (Pfunction_body rhs)
+
+let mk_partial_setter ~loc pat_outter guard pat_inner captured_vars =
+  let varoutter = var "s" in
+  let all_vars = List.map ~f:Loc.txt captured_vars in
+  let main_case =
+    let lhs = (erase_vars_in_pat all_vars)#pattern pat_outter in
+    let rhs = pat_to_constr pat_outter in
+    case ~lhs ~guard ~rhs
+  in
+  let id_case =
+    let lhs = ppat_any ~loc in
+    let rhs = evar ~loc varoutter in
+    case ~lhs ~guard:None ~rhs
+  in
+  pexp_function ~loc
+    [ pparam_val ~loc Nolabel None @@ pvar ~loc varoutter;
+      pparam_val ~loc Nolabel None @@ pat_inner ]
+    None
+    (Pfunction_body
+       (H.Exp.match_
+          ~loc ~attrs:[attr_set_warning ~loc "-11"]
+          (evar ~loc varoutter) [main_case; id_case]))
+
+let mk_from_prj_inj ~loc lun_builder args = 
+  pexp_constraint ~loc
+    (pexp_fun ~loc Nolabel None (punit ~loc)
+       (pexp_apply ~loc
+          (pexp_ident ~loc { loc; txt = lun $. lun_builder })
+          (List.map ~f:(fun f -> Nolabel, f) args)))
+    (ptyp_constr ~loc (Located.mk ~loc (lun $. "t")) [ptyp_any ~loc])
+
+let lense_of_pattern ~ctxt pat guard =
+  let loc = Expansion_context.Extension.extension_point_loc ctxt in
+  let l = find_vars pat in
+  let evars, pvars = tuple_of_list ~loc l in
+  let prj = mk_total_prj ~loc pat guard evars in
+  let inj =
+    let p = alias_open_in_pat#pattern pat in
+    mk_total_setter ~loc p pvars l
+  in
+  mk_from_prj_inj ~loc "lense" [prj; inj]
+
+let prism_of_pattern ~ctxt pat guard =
+  let loc = Expansion_context.Extension.extension_point_loc ctxt in
+  let l = find_vars pat in
+  let evars, pvars = tuple_of_list ~loc l in
+  let prj = mk_partial_prj ~loc pat guard evars in
+  let inj =
+    let p = forbid_open_in_pat#pattern pat in
+    mk_constructor ~loc p pvars
+  in
+  mk_from_prj_inj ~loc "prism" [inj; prj]
+
+let optional_of_pattern ~ctxt pat guard =
+  let loc = Expansion_context.Extension.extension_point_loc ctxt in
+  let l = find_vars pat in
+  let evars, pvars = tuple_of_list ~loc l in
+  let prj = mk_partial_prj ~loc pat guard evars in
+  let inj =
+    let p = alias_open_in_pat#pattern pat in
+    mk_partial_setter ~loc p guard pvars l
+  in
+  mk_from_prj_inj ~loc "optional" [inj; prj]
+
+(** Check if a pattern is a constructor, i.e., it doesn't have
+    open subpatterns. *)
+let is_constructor p = object
+  inherit [bool] Ast_traverse.fold as super
+  method! pattern p b =
+    match p.ppat_desc with
+    | Ppat_any | Ppat_record (_, Open) -> false
+    | _ -> super#pattern p b
+end#pattern p true
+
+(** Check if a pattern is trivially total/irrefutable, i.e. it doesn't
+    have sum constructors.
+    This doesn't catch single sum types. *)
+let is_total p = object
+  inherit [bool] Ast_traverse.fold as super
+  method! pattern p b =
+    match p.ppat_desc with
+    | Ppat_constant _
+    | Ppat_interval _
+    | Ppat_construct _
+    | Ppat_variant _ -> false
+    | _ -> super#pattern p b
+end#pattern p true
+
+let optics_of_pattern ~ctxt pat guard =
+  let constructor = is_constructor pat in
+  let total = is_total pat && Option.is_none guard in
+  match total, constructor with
+  | true, _ -> lense_of_pattern ~ctxt pat guard
+  | _, true -> prism_of_pattern ~ctxt pat guard
+  | false, false -> optional_of_pattern ~ctxt pat guard
+
+let () =
+  let rules =
+    List.map
+      ~f:(fun (s,f) ->
+          Context_free.Rule.extension @@
+          Extension.V3.declare s
+            Extension.Context.expression Ast_pattern.(ppat __ __) f)
+      [ "lun.lense", lense_of_pattern;
+        "lun.prism", prism_of_pattern;
+        "lun.optional", optional_of_pattern;
+        "lun", optics_of_pattern;
+      ]
+  in
+  Driver.register_transformation ~rules "lun"

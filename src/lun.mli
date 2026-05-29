@@ -265,6 +265,9 @@ val prism : ('b -> 't) -> ('s -> ('a, 't) result) -> ('s, 't, 'a, 'b) s
       Lun.prism (fun n -> A n) @@ function A n -> Ok n | v -> Error v
     ]} *)
 
+val optional :
+  ('s -> 'b -> 't) -> ('s -> ('a, 't) result) -> ('s, 't, 'a, 'b) s
+
 exception Undefined
 (** An exception raised by {!val:get} when it's not possible to project a value
     with an optic. *)
@@ -346,6 +349,8 @@ val ( >> ) : ('a, 'b, 'c, 'd) t -> ('c, 'd, 'e, 'f) t -> ('a, 'b, 'e, 'f) t
 
 (** Common lenses and prisms. *)
 
+val id : ('a, 'b, 'a, 'b) t
 val fst : ('a * 'x, 'b * 'x, 'a, 'b) t
 val snd : ('x * 'a, 'x * 'b, 'a, 'b) t
 val some : ('a option, 'b option, 'a, 'b) t
+val nth : int -> ('a list, 'a list, 'a, 'a) t
