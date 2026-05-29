@@ -45,7 +45,7 @@ let lense_impl ~name ~uniq (ld : label_declaration) =
               , pexp_ident ~loc { loc; txt = lident field_name } )
             ]
             (if uniq then None
-            else Some (pexp_ident ~loc { loc; txt = lident var }))))
+             else Some (pexp_ident ~loc { loc; txt = lident var }))))
   in
   pstr_value ~loc Nonrecursive
     [
