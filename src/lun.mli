@@ -265,6 +265,27 @@ val prism : ('b -> 't) -> ('s -> ('a, 't) result) -> ('s, 't, 'a, 'b) s
       Lun.prism (fun n -> A n) @@ function A n -> Ok n | v -> Error v
     ]} *)
 
+val optional : ('s -> 'b -> 't) -> ('s -> ('a, 't) result) -> ('s, 't, 'a, 'b) s
+(** [optional inj prj] makes a new optic like {!val:prim} but the injection
+    function take into account the current value that we would like to
+    {!val:set}. For instance:
+
+    {[
+    type t = A of int | B of int | C of int
+
+    let optic () =
+      let inj prev n = match prev with A _ -> B n | B _ -> C n | C _ -> A n in
+      let prj = function A n | B n | C n -> Ok n in
+      Lun.optional inj prj
+
+    let () =
+      let v = A 0 |> Lun.set optic 1 |> Lun.set optic 2 |> Lun.set optic 3 in
+      (* A 0 -> B 1 -> C 2 -> A 3 *)
+      match v with
+      | A 3 -> assert true
+      | _ -> assert false
+    ]} *)
+
 exception Undefined
 (** An exception raised by {!val:get} when it's not possible to project a value
     with an optic. *)
@@ -346,6 +367,8 @@ val ( >> ) : ('a, 'b, 'c, 'd) t -> ('c, 'd, 'e, 'f) t -> ('a, 'b, 'e, 'f) t
 
 (** Common lenses and prisms. *)
 
+val id : ('a, 'b, 'a, 'b) t
 val fst : ('a * 'x, 'b * 'x, 'a, 'b) t
 val snd : ('x * 'a, 'x * 'b, 'a, 'b) t
 val some : ('a option, 'b option, 'a, 'b) t
+val nth : int -> ('a list, 'a list, 'a, 'a) t
